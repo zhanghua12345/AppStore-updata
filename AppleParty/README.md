@@ -92,6 +92,21 @@ pod install
 
 > 项目依赖 Swift Package，Xcode 可能下载失败，可以清理缓存试试： 打开 Xcode File -> Packages ->  Reset Package Caches
 
+#### 自动续期订阅首周优惠
+
+需要首周优惠的 Excel 增加名为 `IntroductoryOffers` 的页签，列顺序固定为：
+
+| Product ID | 基准国家(代码) | 首周价格 | 优惠模式 | 优惠时长 | 周期数 | 开始日期(留空=上传当天) | 结束日期(留空=无期限) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| vip_week_9.99_29.99_3 | USA | 9.99 | PAY_AS_YOU_GO | ONE_WEEK | 1 | | |
+
+- `PricePoints` 中继续填写后续自动续订价格，例如 `29.99`。
+- `IntroductoryOffers` 中填写首周优惠价格，例如 `9.99`。
+- 首周付费优惠使用 `PAY_AS_YOU_GO`、`ONE_WEEK`、`1`。
+- 开始日期留空时，程序会明确使用上传当天；结束日期留空表示无期限。手动填写时必须使用 `YYYY-MM-DD`。
+- 程序会以基准国家价格点换算并创建全部销售地区的等价首周优惠。
+- 已存在且配置相同的优惠会跳过；存在不同的有效优惠时会停止该地区的创建并在日志中报告。
+
 ### 四、FAQ
 
 - [AppleParty 使用说明 - wiki](https://github.com/37iOS/AppleParty/wiki/AppleParty-%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E)
@@ -129,4 +144,3 @@ pod install
 - [kishikawakatsumi/KeychainAccess](https://github.com/kishikawakatsumi/KeychainAccess)
 - [AvdLee/appstoreconnect-swift-sdk](https://github.com/AvdLee/appstoreconnect-swift-sdk)
   
-

@@ -136,7 +136,7 @@ extension APUploadIAPListVC {
             privateKeyID: ascKey.privateKeyID,
             privateKey: ascKey.privateKey,
             showApiRateLimit: showApiRateLimit)
-        ascAPI.addMessage("密钥信息：\(ascKey.issuerID), \(ascKey.privateKeyID), \(ascKey.privateKey)")
+        ascAPI.addMessage("密钥信息：Issuer ID \(ascKey.issuerID)，Key ID \(ascKey.privateKeyID)")
 
         Task {
             // 1、获取当前账号下 app，判断是否包含当前 提交商品的 app
@@ -235,9 +235,6 @@ extension APUploadIAPListVC {
         // 检查是否已经存在此商品，如果存在就修改信息，如果不存在就创建
         let iaps = oldIAPs.filter({ $0.attributes?.productID == product.productId })
         if let iap = iaps.first {
-            ascAPI.addMessage("订阅商品已经存在：\(product.productId) ，跳过更新信息...")
-            return
-
             ascAPI.addMessage("内购已经存在：\(product.productId) ，开始更新信息中...")
             // 0. 审核备注如果原来有值，而新字段无值，则使用原值
             var product = product
@@ -271,6 +268,9 @@ extension APUploadIAPListVC {
                     } else {
                         // 本地化语言更新失败
                         ascAPI.addMessage("内购本地化版本：\(localization.locale) ，更新语言失败！❌ ")
+                        recordUploadFailure(
+                            product: product,
+                            reason: "本地化更新失败：\(localization.locale)")
                     }
                 } else {
                     // 创建
@@ -904,7 +904,7 @@ extension APUploadIAPListVC {
         }
 
         ascAPI.addMessage(
-            "开始更新订阅商品首周优惠：\(product.productId)，基准国家：\(offer.baseTerritory)，首周价：\(offer.customerPrice.isEmpty ? "免费" : offer.customerPrice)")
+            "开始更新订阅商品首周优惠：\(product.productId)，基准国家：\(offer.baseTerritory)，首周价：\(offer.customerPrice.isEmpty ? "免费" : offer.customerPrice)，开始日期：\(offer.resolvedStartDate())，结束日期：\(offer.endDate.isEmpty ? "无期限" : offer.endDate)，优惠次数：\(offer.numberOfPeriods)")
 
         let targets: [IntroductoryOfferTarget]
         if offer.offerMode == "FREE_TRIAL" {

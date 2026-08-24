@@ -1139,13 +1139,11 @@ class APASCAPI {
         offer: IAPIntroductoryOffer
     ) async -> ASCSubscriptionIntroductoryOffer? {
         var attributes: [String: Any] = [
+            "startDate": offer.resolvedStartDate(),
             "duration": offer.duration,
             "offerMode": offer.offerMode,
             "numberOfPeriods": offer.numberOfPeriods
         ]
-        if offer.startDate.isNotEmpty {
-            attributes["startDate"] = offer.startDate
-        }
         if offer.endDate.isNotEmpty {
             attributes["endDate"] = offer.endDate
         }

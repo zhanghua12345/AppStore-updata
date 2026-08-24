@@ -7,6 +7,7 @@
 //
 
 import XCTest
+import CoreXLSX
 @testable import AppleParty
 
 class ApplePartyTests: XCTestCase {
@@ -25,6 +26,33 @@ class ApplePartyTests: XCTestCase {
         // Any test you write for XCTest can be annotated as throws and async.
         // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
         // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+    }
+
+    func testParseSubscriptionIntroductoryOffer() throws {
+        let projectDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let exampleURL = projectDirectory
+            .appendingPathComponent("AppleParty/Resources/InAppPurchase/example.xlsx")
+        let file = try XCTUnwrap(XLSXFile(filepath: exampleURL.path))
+
+        let offers = IAPExcelParser.parserIntroductoryOffers(file)
+        let offer = try XCTUnwrap(offers.first)
+
+        XCTAssertEqual(offers.count, 1)
+        XCTAssertEqual(offer.productId, "com.iap.03")
+        XCTAssertEqual(offer.baseTerritory, "USA")
+        XCTAssertEqual(offer.customerPrice, "0.99")
+        XCTAssertEqual(offer.offerMode, "PAY_AS_YOU_GO")
+        XCTAssertEqual(offer.duration, "ONE_WEEK")
+        XCTAssertEqual(offer.numberOfPeriods, 1)
+        XCTAssertTrue(offer.startDate.isEmpty)
+        XCTAssertTrue(offer.endDate.isEmpty)
+
+        let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        XCTAssertEqual(
+            offer.resolvedStartDate(now: Date(timeIntervalSince1970: 0), timeZone: utc),
+            "1970-01-01")
     }
 
     func testPerformanceExample() throws {

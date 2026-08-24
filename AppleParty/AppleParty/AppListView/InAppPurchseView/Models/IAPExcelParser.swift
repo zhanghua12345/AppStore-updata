@@ -73,6 +73,17 @@ struct IAPIntroductoryOffer {
     var numberOfPeriods: Int = 1
     var startDate: String = ""
     var endDate: String = ""
+
+    /// 开始日期留空时，以真正发起上传请求的当天为准，避免 Excel 写死日期后过期。
+    func resolvedStartDate(now: Date = Date(), timeZone: TimeZone = .current) -> String {
+        guard startDate.isEmpty else { return startDate }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: now)
+    }
 }
 
 /// 内购统一模型
@@ -152,11 +163,11 @@ struct IAPExcelParser {
                     continue
                 }
                 
-                guard let worksheet = try? file.parseWorksheet(at: path),
-                      let sharedStrings = try! file.parseSharedStrings() else {
-                    print("This worksheet/sharedStrings is null")
+                guard let worksheet = try? file.parseWorksheet(at: path) else {
+                    print("This worksheet is null")
                     return result
                 }
+                let sharedStrings = try! file.parseSharedStrings()
                 var index = 0
                 var columnTitles = [String]()
                 var columnIndexs = [String]()
@@ -165,14 +176,7 @@ struct IAPExcelParser {
                     index += 1
                     for cell in row.cells {
                         let key = cell.reference.column.value
-                        var columnStrings = cell.stringValue(sharedStrings) ?? ""
-                        // 富文本读取
-                        var richStr = ""
-                        let richColumnCString = cell.richStringValue(sharedStrings)
-                        for richChar in richColumnCString {
-                            richStr += string(from: richChar.text)
-                        }
-                        columnStrings += richStr
+                        let columnStrings = cellStringValue(cell, sharedStrings)
                         // 第一行作为标识行，用于多语言标识，默认信任此字段
                         if index == 1 {
                             columnTitles.append(columnStrings)
@@ -211,11 +215,15 @@ struct IAPExcelParser {
                         let localization = IAPLocalization(name: text, description: "", locale: "en-US")
                         iap.groupLocalization = localization
                     }
-                    // 商品本地化名称和描述
+                    // 商品本地化名称和描述。自动续期订阅和普通内购使用不同的上传接口。
                     if let text = columnValues["I"], !text.isEmpty {
                         let des = columnValues["J"] ?? ""
                         let localization = IAPLocalization(name: text, description: des, locale: "en-US")
-                        iap.subscriptionLocalization = localization
+                        if iap.inAppPurchaseType == .AUTO_RENEWABLE {
+                            iap.subscriptionLocalization = localization
+                        } else {
+                            iap.localizations = [localization]
+                        }
                     }
                     
                     // 非法的行
@@ -251,30 +259,6 @@ struct IAPExcelParser {
                     if let territory = territorys.first {
                         iap.territories = territory
                     }
-                    
-                    
-                    // 商品本地化名称和描述
-//                    var localizations: [IAPLocalization] = []
-//                    // 本地化的标识，从下标7开始，奇数遍历，成对出现的
-//                    let columeMax = columnIndexs.count
-//                    let columeEndIndex = columnIndexs.count - 1
-//                    for idx in stride(from: 7, to: columeEndIndex, by: 2){
-//                        if idx + 1 <= columeMax {
-//                            let locale = columnTitles[idx]
-//                            let key1 = columnIndexs[idx]
-//                            let key2 = columnIndexs[idx+1]
-//                            let name = columnValues[key1] ?? ""
-//                            let description = columnValues[key2] ?? ""
-//                            if !name.isEmpty && !description.isEmpty {
-//                                var localization = IAPLocalization()
-//                                localization.locale = locale
-//                                localization.name = name
-//                                localization.description = description
-//                                localizations.append(localization)
-//                            }
-//                        }
-//                    }
-//                    iap.localizations = localizations
                     result.append(iap)
                 }
             }
@@ -283,17 +267,10 @@ struct IAPExcelParser {
     }
 
     /// 公共方法
-    fileprivate static func handleRowContents(_ row: Row, _ sharedStrings: SharedStrings, _ index: Int, _ columnIndexs: inout [String], _ columnValues: inout [String : String]) {
+    fileprivate static func handleRowContents(_ row: Row, _ sharedStrings: SharedStrings?, _ index: Int, _ columnIndexs: inout [String], _ columnValues: inout [String : String]) {
         for cell in row.cells {
             let key = cell.reference.column.value
-            var columnStrings = cell.stringValue(sharedStrings) ?? ""
-            // 富文本读取
-            var richStr = ""
-            let richColumnCString = cell.richStringValue(sharedStrings)
-            for richChar in richColumnCString {
-                richStr += string(from: richChar.text)
-            }
-            columnStrings += richStr
+            let columnStrings = cellStringValue(cell, sharedStrings)
             // 第一行作为标识行，用于多语言标识，默认信任此字段
             if index == 1 {
                 columnIndexs.append(key)
@@ -301,6 +278,20 @@ struct IAPExcelParser {
                 columnValues[key] = columnStrings
             }
         }
+    }
+
+    /// CoreXLSX 旧版本需要分别处理共享字符串和 inlineStr。
+    /// Excel、Numbers、WPS 以及 openpyxl 生成的文件可能使用不同的存储方式。
+    fileprivate static func cellStringValue(_ cell: Cell, _ sharedStrings: SharedStrings?) -> String {
+        guard let sharedStrings = sharedStrings else {
+            return cell.inlineString?.text ?? cell.value ?? ""
+        }
+
+        var result = cell.stringValue(sharedStrings) ?? cell.inlineString?.text ?? cell.value ?? ""
+        for richText in cell.richStringValue(sharedStrings) {
+            result += string(from: richText.text)
+        }
+        return result
     }
     
     /// 读取价格计划表
@@ -317,11 +308,11 @@ struct IAPExcelParser {
                     continue
                 }
                 
-                guard let worksheet = try? file.parseWorksheet(at: path),
-                      let sharedStrings = try! file.parseSharedStrings() else {
-                    print("This worksheet/sharedStrings is null")
+                guard let worksheet = try? file.parseWorksheet(at: path) else {
+                    print("This worksheet is null")
                     return result
                 }
+                let sharedStrings = try! file.parseSharedStrings()
                 var index = 0
                 var columnIndexs = [String]()
                 for row in worksheet.data?.rows ?? [] {
@@ -386,11 +377,11 @@ struct IAPExcelParser {
             for (name, path) in try! file.parseWorksheetPathsAndNames(workbook: wbk) {
                 guard name == "IntroductoryOffers" else { continue }
 
-                guard let worksheet = try? file.parseWorksheet(at: path),
-                      let sharedStrings = try! file.parseSharedStrings() else {
-                    print("This worksheet/sharedStrings is null")
+                guard let worksheet = try? file.parseWorksheet(at: path) else {
+                    print("This worksheet is null")
                     return result
                 }
+                let sharedStrings = try! file.parseSharedStrings()
 
                 var index = 0
                 var columnIndexs = [String]()
@@ -451,11 +442,11 @@ struct IAPExcelParser {
                     continue
                 }
                 
-                guard let worksheet = try? file.parseWorksheet(at: path),
-                      let sharedStrings = try! file.parseSharedStrings() else {
-                    print("This worksheet/sharedStrings is null")
+                guard let worksheet = try? file.parseWorksheet(at: path) else {
+                    print("This worksheet is null")
                     return result
                 }
+                let sharedStrings = try! file.parseSharedStrings()
                 var index = 0
                 var columnIndexs = [String]()
                 for row in worksheet.data?.rows ?? [] {
