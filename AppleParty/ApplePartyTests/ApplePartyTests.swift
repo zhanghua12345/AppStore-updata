@@ -55,6 +55,48 @@ class ApplePartyTests: XCTestCase {
             "1970-01-01")
     }
 
+    func testInferIntroductoryOfferFromProductID() throws {
+        let schedule = IAPPriceSchedules(
+            productId: "dinreel.vip_month_29.99_49.99_3",
+            baseTerritory: "USA",
+            baseCustomerPrice: "49.99")
+        let offer = try XCTUnwrap(IAPExcelParser.inferredIntroductoryOffer(
+            productId: schedule.productId,
+            priceSchedule: schedule))
+
+        XCTAssertEqual(offer.customerPrice, "29.99")
+        XCTAssertEqual(offer.baseTerritory, "USA")
+        XCTAssertEqual(offer.offerMode, "PAY_AS_YOU_GO")
+        XCTAssertEqual(offer.duration, "ONE_WEEK")
+        XCTAssertEqual(offer.numberOfPeriods, 1)
+        XCTAssertTrue(offer.startDate.isEmpty)
+        XCTAssertTrue(offer.endDate.isEmpty)
+    }
+
+    func testInferIntroductoryOfferFromAbnormalProductID() throws {
+        let schedule = IAPPriceSchedules(
+            productId: "dinreel.vip_quarter_abnormal_79.99_99.99_6",
+            baseTerritory: "usa",
+            baseCustomerPrice: "99.99")
+        let offer = try XCTUnwrap(IAPExcelParser.inferredIntroductoryOffer(
+            productId: schedule.productId,
+            priceSchedule: schedule))
+
+        XCTAssertEqual(offer.customerPrice, "79.99")
+        XCTAssertEqual(offer.baseTerritory, "USA")
+    }
+
+    func testDoesNotInferOfferWhenRecurringPriceDoesNotMatch() {
+        let schedule = IAPPriceSchedules(
+            productId: "dinreel.bag_week_59.99_119.99_1",
+            baseTerritory: "USA",
+            baseCustomerPrice: "99.99")
+
+        XCTAssertNil(IAPExcelParser.inferredIntroductoryOffer(
+            productId: schedule.productId,
+            priceSchedule: schedule))
+    }
+
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
         self.measure {

@@ -696,12 +696,12 @@ extension APUploadIAPListVC {
             // 3. 商品价格档位
             await updateSubscriptionPricePoint(iapId: iap.id, product: product, ascAPI: ascAPI)
 
-            // 6. 首周介绍性优惠
-            let introductoryOfferReady = await updateSubscriptionIntroductoryOffer(
-                iapId: iap.id, product: product, ascAPI: ascAPI)
-
             // Apple 后台偶发会在创建/更新后错误显示“元数据缺失”，补一次等价 PATCH 来触发状态刷新。
             await refreshSubscriptionMetadata(iapId: iap.id, product: product, ascAPI: ascAPI)
+
+            // 6. 首周介绍性优惠必须最后创建，避免后续元数据 PATCH 与已有优惠冲突。
+            let introductoryOfferReady = await updateSubscriptionIntroductoryOffer(
+                iapId: iap.id, product: product, ascAPI: ascAPI)
 
             if submitForReview, introductoryOfferReady {
                 await submitSubscriptionForReview(iapId: iap.id, product: product, ascAPI: ascAPI)
@@ -739,12 +739,12 @@ extension APUploadIAPListVC {
             // 3. 商品价格档位
             await updateSubscriptionPricePoint(iapId: iap.id, product: product, ascAPI: ascAPI)
 
-            // 6. 首周介绍性优惠
-            let introductoryOfferReady = await updateSubscriptionIntroductoryOffer(
-                iapId: iap.id, product: product, ascAPI: ascAPI)
-
             // Apple 后台偶发会在创建/更新后错误显示“元数据缺失”，补一次等价 PATCH 来触发状态刷新。
             await refreshSubscriptionMetadata(iapId: iap.id, product: product, ascAPI: ascAPI)
+
+            // 6. 首周介绍性优惠必须最后创建，避免后续元数据 PATCH 与已有优惠冲突。
+            let introductoryOfferReady = await updateSubscriptionIntroductoryOffer(
+                iapId: iap.id, product: product, ascAPI: ascAPI)
 
             if submitForReview, introductoryOfferReady {
                 await submitSubscriptionForReview(iapId: iap.id, product: product, ascAPI: ascAPI)

@@ -252,6 +252,10 @@ struct IAPExcelParser {
                     let offers = introductoryOffers.filter({ $0.productId == iap.productId })
                     if let offer = offers.first {
                         iap.introductoryOffer = offer
+                    } else if iap.inAppPurchaseType == .AUTO_RENEWABLE {
+                        iap.introductoryOffer = inferredIntroductoryOffer(
+                            productId: iap.productId,
+                            priceSchedule: iap.priceSchedules)
                     }
                     
                     //销售国家和地区
@@ -292,6 +296,56 @@ struct IAPExcelParser {
             result += string(from: richText.text)
         }
         return result
+    }
+
+    /// 兼容不增加工作表的旧模板：从 Product ID 中的“首周价_续订价_序号”推导首周优惠。
+    /// 支持 bag/vip 的 week、month、quarter、year，以及带 abnormal 标记的会员商品。
+    static func inferredIntroductoryOffer(
+        productId: String,
+        priceSchedule: IAPPriceSchedules?
+    ) -> IAPIntroductoryOffer? {
+        guard let priceSchedule = priceSchedule,
+              priceSchedule.baseTerritory.isNotEmpty else {
+            return nil
+        }
+
+        let components = productId.lowercased().split(separator: "_").map(String.init)
+        guard let productFamily = components.first,
+              productFamily.hasSuffix("bag") || productFamily.hasSuffix("vip"),
+              let periodIndex = components.firstIndex(where: {
+                  ["week", "month", "quarter", "year"].contains($0)
+              }) else {
+            return nil
+        }
+
+        var priceIndex = periodIndex + 1
+        if components.indices.contains(priceIndex), components[priceIndex] == "abnormal" {
+            priceIndex += 1
+        }
+        guard components.indices.contains(priceIndex + 2),
+              Int(components.last ?? "") != nil else {
+            return nil
+        }
+
+        let locale = Locale(identifier: "en_US_POSIX")
+        let introductoryPrice = components[priceIndex].twoDecimalPrice()
+        let recurringPrice = components[priceIndex + 1].twoDecimalPrice()
+        guard Decimal(string: introductoryPrice, locale: locale) != nil,
+              Decimal(string: recurringPrice, locale: locale) != nil,
+              recurringPrice.normalizePrice()
+                == priceSchedule.baseCustomerPrice.normalizePrice() else {
+            return nil
+        }
+
+        return IAPIntroductoryOffer(
+            productId: productId,
+            baseTerritory: priceSchedule.baseTerritory.uppercased(),
+            customerPrice: introductoryPrice,
+            offerMode: "PAY_AS_YOU_GO",
+            duration: "ONE_WEEK",
+            numberOfPeriods: 1,
+            startDate: "",
+            endDate: "")
     }
     
     /// 读取价格计划表
