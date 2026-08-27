@@ -11,14 +11,16 @@ Apply this workflow before doing any work in this repository.
 
 1. Read [references/learned-rules.md](references/learned-rules.md) completely and apply every active rule whose scope matches the request.
 2. Read [references/project-context.md](references/project-context.md) when the request depends on architecture, build commands, Excel structure, App Store Connect behavior, or file ownership. For a trivial repository question, read only the relevant section.
-3. Inspect the current worktree and the files involved. Current code and tests are authoritative when this reference has become stale.
-4. Identify whether the task concerns the macOS app, an Excel fixture/template, documentation, or more than one layer. Trace changes through all affected layers before editing.
+3. Read [references/iap-generation-rules.md](references/iap-generation-rules.md) completely for every request involving coins, coin bags, VIP memberships, recharge-item generation, Product IDs, prices, entitlements, or their Excel workbooks. Apply its source-priority and request-expansion rules before proposing or editing rows.
+4. Inspect the current worktree and the files involved. Current code and tests are authoritative when this reference has become stale.
+5. Identify whether the task concerns the macOS app, an Excel fixture/template, documentation, or more than one layer. Trace changes through all affected layers before editing.
 
 ## Work With The Repository
 
 - Preserve unrelated worktree changes and keep edits within the request's scope.
 - For Excel-driven behavior, check the workbook sheet and column contract, `IAPExcelParser`, the model, the upload controller, API helpers, tests, fixtures, and user documentation as applicable. Do not update only one layer when the behavior crosses several.
 - Preserve workbook formatting, formulas, sheet names, column order, and unrelated rows. Validate edited `.xlsx` files as ZIP/OOXML packages and, when behavior depends on them, parse them through the app's parser or a structured workbook library.
+- For a minimal product request such as a type and one price, expand all implied normal/abnormal prices, supported variants, suffixes, entitlements, linked workbook rows, and backend mappings defined by the IAP rules. Show unsupported price-point candidates and rule conflicts instead of silently omitting or guessing them.
 - Treat App Store Connect operations as live external mutations. Do not upload products, change prices, submit reviews, use stored credentials, or perform releases unless the current user request explicitly authorizes that operation.
 - Validate changes in proportion to risk. Prefer focused XCTest coverage, then run the `AppleParty` scheme from `AppleParty/AppleParty.xcworkspace`. Report any verification that could not be run.
 - Do not commit, push, publish, or release unless explicitly requested.

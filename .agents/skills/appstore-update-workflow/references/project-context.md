@@ -5,6 +5,8 @@ Use this reference to orient repository work. Verify it against the current code
 ## Repository Shape
 
 - The Git root contains business/test workbooks such as `demo.xlsx`, `会员.xlsx`, and the `金币*.xlsx` files.
+- The root `index.html` is an offline, double-clickable operation console that selects local workbook names and generates complete Codex instructions. It intentionally does not read credentials, parse workbook contents, or perform live uploads.
+- `上传操作说明.md` is the Chinese operator guide for workbook preparation, AppleParty uploads, operations-backend imports, and no-Xcode usage options.
 - The macOS application lives in `AppleParty/` and is built from `AppleParty/AppleParty.xcworkspace` with the `AppleParty` scheme.
 - The app is primarily AppKit/Swift. CocoaPods supplies Alamofire, CoreXLSX, Sparkle, and other UI/utilities; Swift Package Manager supplies `appstoreconnect-swift-sdk` and related packages.
 - Open the `.xcworkspace`, not the `.xcodeproj`, so CocoaPods dependencies are available.
@@ -39,6 +41,8 @@ Use this reference to orient repository work. Verify it against the current code
 - App Store Connect API helpers: `AppleParty/AppleParty/Shared/Network/AppStoreConnectAPI.swift`
 - Parser coverage: `AppleParty/ApplePartyTests/ApplePartyTests.swift`
 - User-facing workflow notes: `AppleParty/README.md`
+- Offline operator console: `index.html`
+- Chinese upload guide: `上传操作说明.md`
 
 ## Verification
 
