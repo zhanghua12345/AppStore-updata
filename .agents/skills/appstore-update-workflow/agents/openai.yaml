@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppStore Update Workflow"
+  short_description: "Apply repository workflow and learned project rules"
