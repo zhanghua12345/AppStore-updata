@@ -690,24 +690,37 @@ class APASCAPI {
     /// - Parameters:
     ///   - appId: apple id
     /// - Returns: 获取所有订阅组
-    func fetchSubscriptionGroups(appId: String) async -> [ASCSubscriptionGroup] {
+    func fetchSubscriptionGroups(appId: String) async -> [ASCSubscriptionGroup]? {
         let request = APIEndpoint.v1.apps.id(appId).subscriptionGroups
             .get(parameters: .init(
                 limit: 200
             ))
-        do {
-            guard let provider = provider else {
-                return []
+        let maxRetryCount = 4
+        for retryIndex in 0..<maxRetryCount {
+            do {
+                guard let provider = provider else {
+                    return nil
+                }
+                var allApps: [ASCSubscriptionGroup] = []
+                for try await pagedResult in provider.paged(request) {
+                    allApps.append(contentsOf: pagedResult.data)
+                }
+                return allApps
+            } catch APIProvider.Error.requestFailure(let statusCode, _, _)
+                where statusCode == 429 && retryIndex < maxRetryCount - 1
+            {
+                let waitSeconds = UInt64(2 << retryIndex)
+                addMessage("获取订阅组遇到速率限制，\(waitSeconds) 秒后重试...")
+                try? await Task.sleep(nanoseconds: waitSeconds * 1_000_000_000)
+            } catch APIProvider.Error.requestFailure(let statusCode, let errorResponse, _) {
+                handleRequestFailure(statusCode, errorResponse)
+                return nil
+            } catch {
+                handleError("获取所有订阅组失败: \(error.localizedDescription)")
+                return nil
             }
-            var allApps: [ASCSubscriptionGroup] = []
-            for try await pagedResult in provider.paged(request) {
-                allApps.append(contentsOf: pagedResult.data)
-            }
-            return allApps
-        } catch {
-            handleError("获取所有订阅组失败: \(error.localizedDescription)")
-            return []
         }
+        return nil
     }
 
 
@@ -756,14 +769,14 @@ class APASCAPI {
     /// - Parameters:
     ///   - iapGroupId: 订阅组 id
     /// - Returns: 获取所有订阅组
-    func fetchSubscriptionGroupLocalizations(iapGroupId: String) async -> [ASCSubscriptionGroupLocale] {
+    func fetchSubscriptionGroupLocalizations(iapGroupId: String) async -> [ASCSubscriptionGroupLocale]? {
         let request = APIEndpoint.v1.subscriptionGroups.id(iapGroupId).subscriptionGroupLocalizations
             .get(parameters: .init(
                 limit: 200
             ))
         do {
             guard let provider = provider else {
-                return []
+                return nil
             }
             var allApps: [ASCSubscriptionGroupLocale] = []
             for try await pagedResult in provider.paged(request) {
@@ -772,7 +785,7 @@ class APASCAPI {
             return allApps
         } catch {
             handleError("获取所有订阅组的本地化信息失败: \(error.localizedDescription)")
-            return []
+            return nil
         }
     }
 
@@ -826,24 +839,37 @@ class APASCAPI {
     /// - Parameters:
     ///   - appId: apple id
     /// - Returns: 获取所有订阅
-    func fetchSubscriptionGroupSubscriptions(iapGroupId: String) async -> [ASCSubscription] {
+    func fetchSubscriptionGroupSubscriptions(iapGroupId: String) async -> [ASCSubscription]? {
         let request = APIEndpoint.v1.subscriptionGroups.id(iapGroupId).subscriptions
             .get(parameters: .init(
                 limit: 200
             ))
-        do {
-            guard let provider = provider else {
-                return []
+        let maxRetryCount = 4
+        for retryIndex in 0..<maxRetryCount {
+            do {
+                guard let provider = provider else {
+                    return nil
+                }
+                var allApps: [ASCSubscription] = []
+                for try await pagedResult in provider.paged(request) {
+                    allApps.append(contentsOf: pagedResult.data)
+                }
+                return allApps
+            } catch APIProvider.Error.requestFailure(let statusCode, _, _)
+                where statusCode == 429 && retryIndex < maxRetryCount - 1
+            {
+                let waitSeconds = UInt64(2 << retryIndex)
+                addMessage("获取订阅组商品遇到速率限制，\(waitSeconds) 秒后重试...")
+                try? await Task.sleep(nanoseconds: waitSeconds * 1_000_000_000)
+            } catch APIProvider.Error.requestFailure(let statusCode, let errorResponse, _) {
+                handleRequestFailure(statusCode, errorResponse)
+                return nil
+            } catch {
+                handleError("获取订阅组下所有内购商品失败: \(error.localizedDescription)")
+                return nil
             }
-            var allApps: [ASCSubscription] = []
-            for try await pagedResult in provider.paged(request) {
-                allApps.append(contentsOf: pagedResult.data)
-            }
-            return allApps
-        } catch {
-            handleError("获取订阅组下所有内购商品失败: \(error.localizedDescription)")
-            return []
         }
+        return nil
     }
 
     /// 获取订阅商品详情
