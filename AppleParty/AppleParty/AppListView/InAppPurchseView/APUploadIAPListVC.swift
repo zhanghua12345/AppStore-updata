@@ -43,6 +43,15 @@ class APUploadIAPListVC: NSViewController {
         let customerPrice: String
     }
 
+    private final class SubscriptionUploadCatalog {
+        var groups: [ASCSubscriptionGroup]
+        var subscriptionsByGroupId = [String: [ASCSubscription]]()
+
+        init(groups: [ASCSubscriptionGroup]) {
+            self.groups = groups
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -169,16 +178,32 @@ extension APUploadIAPListVC {
             // 3、获取所有的内购商品，如果存在的商品就直接修改，如果不存在就创建
             let oldIAPs = await ascAPI.fetchInAppPurchasesList(appId: appId)
 
+            var subscriptionCatalog: SubscriptionUploadCatalog?
+            if iaps.contains(where: { $0.inAppPurchaseType == .AUTO_RENEWABLE }) {
+                guard let groups = await ascAPI.fetchSubscriptionGroups(appId: appId) else {
+                    self.enterBtn.isEnabled = true
+                    APHUD.hide()
+                    ascAPI.addMessage("获取订阅组失败，已停止订阅商品上传，请稍后重试。❌")
+                    return
+                }
+                subscriptionCatalog = SubscriptionUploadCatalog(groups: groups)
+            }
+
             let submitSubscriptionReview = self.submitSubscriptionReviewBtn.state == .on
 
             // 4、遍历所有要上传的商品
             for product in iaps {
                 // 订阅类型与非订单类型不一样的处理逻辑
                 if product.inAppPurchaseType == .AUTO_RENEWABLE {
+                    guard let subscriptionCatalog else {
+                        self.recordUploadFailure(product: product, reason: "订阅目录获取失败")
+                        continue
+                    }
                     await createRenewSubscription(
                         appId: appId,
                         product: product,
                         ascAPI: ascAPI,
+                        catalog: subscriptionCatalog,
                         submitForReview: submitSubscriptionReview)
                 } else {
                     await createInAppPurchase(
@@ -563,22 +588,20 @@ extension APUploadIAPListVC {
     // MARK: - 上传订阅商品
 
     /// 订阅商品创建或更新
-    func createRenewSubscription(
+    private func createRenewSubscription(
         appId: String,
         product: IAPProduct,
         ascAPI: APASCAPI,
+        catalog: SubscriptionUploadCatalog,
         submitForReview: Bool
     ) async {
         let groupName = product.groupName
         var currentSubGroup: ASCSubscriptionGroup?
-        // 1、是否有订阅组，没有时要先创建
-        var subGroups = await ascAPI.fetchSubscriptionGroups(appId: appId)
-        //        if subGroups.isEmpty {
-        //        }
-
-        for subGroup in subGroups {
+        // 订阅组在上传开始时只拉取一次，避免每个商品重复扫描全部组。
+        for subGroup in catalog.groups {
             if subGroup.attributes?.referenceName == groupName {
                 currentSubGroup = subGroup
+                break
             }
         }
 
@@ -587,18 +610,8 @@ extension APUploadIAPListVC {
             let group = await ascAPI.createSubscriptionGroups(appId: appId, groupName: groupName)
         {
             currentSubGroup = group
-            subGroups.append(group)
-
-            for localization in product.localizations {
-                if await ascAPI.createSubscriptionGroupLocalizations(
-                    iapGroupId: group.id, name: localization.name, locale: localization.locale,
-                    customAppName: nil) == nil
-                {
-                    recordUploadFailure(
-                        product: product,
-                        reason: "订阅组本地化创建失败：\(localization.locale)")
-                }
-            }
+            catalog.groups.append(group)
+            catalog.subscriptionsByGroupId[group.id] = []
         } else if currentSubGroup == nil {
             ascAPI.addMessage("订阅商品：\(product.productId) ，创建订阅组失败！❌ ")
             recordUploadFailure(product: product, reason: "订阅组创建失败")
@@ -608,22 +621,47 @@ extension APUploadIAPListVC {
         //订阅组设置国际化
         if let group = currentSubGroup {
             if let localization = product.groupLocalization {
-                if await ascAPI.createSubscriptionGroupLocalizations(
+                guard
+                    let existingLocalizations =
+                        await ascAPI.fetchSubscriptionGroupLocalizations(iapGroupId: group.id)
+                else {
+                    recordUploadFailure(
+                        product: product,
+                        reason: "订阅组本地化查询失败：\(localization.locale)")
+                    return
+                }
+                if existingLocalizations.contains(where: {
+                    $0.attributes?.locale == localization.locale
+                }) {
+                    ascAPI.addMessage(
+                        "订阅组本地化已经存在：\(groupName)，\(localization.locale)，跳过重复创建 ✅ ")
+                } else if await ascAPI.createSubscriptionGroupLocalizations(
                     iapGroupId: group.id, name: localization.name, locale: localization.locale,
                     customAppName: nil) == nil
                 {
                     recordUploadFailure(
                         product: product,
-                        reason: "订阅组本地化更新失败：\(localization.locale)")
+                        reason: "订阅组本地化创建失败：\(localization.locale)")
+                    return
                 }
             }
         }
 
-        // 2、有订阅组，获取所有订阅组的所有订阅商品
-        var subscriptions = [ASCSubscription]()
-        for subGroup in subGroups {
-            let subs = await ascAPI.fetchSubscriptionGroupSubscriptions(iapGroupId: subGroup.id)
-            subscriptions.append(contentsOf: subs)
+        // 只获取当前订阅组的商品，同一组后续直接使用缓存。
+        guard let currentSubGroup else { return }
+        let subscriptions: [ASCSubscription]
+        if let cached = catalog.subscriptionsByGroupId[currentSubGroup.id] {
+            subscriptions = cached
+        } else {
+            guard
+                let fetched = await ascAPI.fetchSubscriptionGroupSubscriptions(
+                    iapGroupId: currentSubGroup.id)
+            else {
+                recordUploadFailure(product: product, reason: "订阅组商品查询失败")
+                return
+            }
+            catalog.subscriptionsByGroupId[currentSubGroup.id] = fetched
+            subscriptions = fetched
         }
 
         // 3、查看是否存在订阅商品，不存在就创建，存在就更新
@@ -711,14 +749,16 @@ extension APUploadIAPListVC {
 
         } else {
             // 1. 创建新的商品
-            guard let iapGroupId = currentSubGroup?.id,
-                let iap = await ascAPI.createSubscription(iapGroupId: iapGroupId, product: product)
+            let iapGroupId = currentSubGroup.id
+            guard let iap = await ascAPI.createSubscription(
+                iapGroupId: iapGroupId, product: product)
             else {
                 // 创建失败
                 ascAPI.addMessage("订阅商品：\(product.productId) ，创建失败！❌ ")
                 recordUploadFailure(product: product, reason: "订阅项创建失败")
                 return
             }
+            catalog.subscriptionsByGroupId[iapGroupId, default: []].append(iap)
 
             // 2. 商品本地化语言
             if let localization = product.subscriptionLocalization {
@@ -1029,6 +1069,18 @@ extension APUploadIAPListVC {
         }
         if validDurations.contains(offer.duration) == false {
             errors.append("优惠时长无效：\(offer.duration)")
+        }
+        let durationBySubscriptionPeriod = [
+            "ONE_WEEK": "ONE_WEEK",
+            "ONE_MONTH": "ONE_MONTH",
+            "THREE_MONTHS": "THREE_MONTHS",
+            "ONE_YEAR": "ONE_YEAR"
+        ]
+        if let subscriptionPeriod = product.subscriptions?.subscriptionPeriod,
+           let expectedDuration = durationBySubscriptionPeriod[subscriptionPeriod],
+           offer.duration != expectedDuration {
+            errors.append(
+                "优惠时长与订阅周期不一致：\(offer.duration)，应为 \(expectedDuration)")
         }
         if offer.numberOfPeriods <= 0 {
             errors.append("周期数必须大于 0")
