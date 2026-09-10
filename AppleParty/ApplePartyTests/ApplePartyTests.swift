@@ -67,7 +67,7 @@ class ApplePartyTests: XCTestCase {
         XCTAssertEqual(offer.customerPrice, "29.99")
         XCTAssertEqual(offer.baseTerritory, "USA")
         XCTAssertEqual(offer.offerMode, "PAY_AS_YOU_GO")
-        XCTAssertEqual(offer.duration, "ONE_WEEK")
+        XCTAssertEqual(offer.duration, "ONE_MONTH")
         XCTAssertEqual(offer.numberOfPeriods, 1)
         XCTAssertTrue(offer.startDate.isEmpty)
         XCTAssertTrue(offer.endDate.isEmpty)
@@ -84,6 +84,28 @@ class ApplePartyTests: XCTestCase {
 
         XCTAssertEqual(offer.customerPrice, "79.99")
         XCTAssertEqual(offer.baseTerritory, "USA")
+        XCTAssertEqual(offer.duration, "THREE_MONTHS")
+    }
+
+    func testInferIntroductoryOfferDurationFollowsVIPPeriod() throws {
+        let cases = [
+            ("dinreel.vip_week_9.99_29.99_3", "29.99", "ONE_WEEK"),
+            ("dinreel.vip_month_29.99_49.99_3", "49.99", "ONE_MONTH"),
+            ("dinreel.vip_quarter_79.99_99.99_3", "99.99", "THREE_MONTHS"),
+            ("dinreel.vip_year_99.99_119.99_3", "119.99", "ONE_YEAR")
+        ]
+
+        for (productId, recurringPrice, expectedDuration) in cases {
+            let schedule = IAPPriceSchedules(
+                productId: productId,
+                baseTerritory: "USA",
+                baseCustomerPrice: recurringPrice)
+            let offer = try XCTUnwrap(IAPExcelParser.inferredIntroductoryOffer(
+                productId: productId,
+                priceSchedule: schedule))
+            XCTAssertEqual(offer.duration, expectedDuration, productId)
+            XCTAssertEqual(offer.numberOfPeriods, 1, productId)
+        }
     }
 
     func testDoesNotInferOfferWhenRecurringPriceDoesNotMatch() {
@@ -95,6 +117,31 @@ class ApplePartyTests: XCTestCase {
         XCTAssertNil(IAPExcelParser.inferredIntroductoryOffer(
             productId: schedule.productId,
             priceSchedule: schedule))
+    }
+
+    func testAbnormalCoinBagReferenceNamesAreUniqueAcrossWorkbooks() throws {
+        let repositoryDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let abnormalURL = repositoryDirectory.appendingPathComponent("金币包异常.xlsx")
+        let normalURL = repositoryDirectory.appendingPathComponent("金币包正常.xlsx")
+
+        XCTAssertNotNil(XLSXFile(filepath: abnormalURL.path))
+        let abnormalProducts = IAPExcelParser.parser(abnormalURL)
+        let normalProducts = IAPExcelParser.parser(normalURL)
+        let abnormalNames = abnormalProducts.map(\.name)
+        let normalNames = Set(normalProducts.map(\.name))
+
+        XCTAssertEqual(abnormalProducts.count, 58)
+        XCTAssertEqual(Set(abnormalNames).count, abnormalProducts.count)
+        XCTAssertTrue(Set(abnormalNames).isDisjoint(with: normalNames))
+        XCTAssertTrue(abnormalProducts.allSatisfy { product in
+            let expectedName = product.productId.replacingOccurrences(
+                of: "dinreel.bag_week_",
+                with: "Bag Week ")
+            return product.groupName == expectedName && product.name == expectedName
+        })
     }
 
     func testPerformanceExample() throws {
