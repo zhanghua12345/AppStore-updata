@@ -63,7 +63,7 @@ struct IAPSubscriptions {
 }
 
 /// 自动续期订阅的介绍性优惠。
-/// 当前 Excel 模板默认使用 PAY_AS_YOU_GO + ONE_WEEK + 1，实现“首周优惠价”。
+/// 默认值适用于周订阅；月、季、年订阅的 duration 必须跟随订阅周期。
 struct IAPIntroductoryOffer {
     var productId: String = ""
     var baseTerritory: String = ""
@@ -337,12 +337,22 @@ struct IAPExcelParser {
             return nil
         }
 
+        let durationByPeriod = [
+            "week": "ONE_WEEK",
+            "month": "ONE_MONTH",
+            "quarter": "THREE_MONTHS",
+            "year": "ONE_YEAR"
+        ]
+        guard let duration = durationByPeriod[components[periodIndex]] else {
+            return nil
+        }
+
         return IAPIntroductoryOffer(
             productId: productId,
             baseTerritory: priceSchedule.baseTerritory.uppercased(),
             customerPrice: introductoryPrice,
             offerMode: "PAY_AS_YOU_GO",
-            duration: "ONE_WEEK",
+            duration: duration,
             numberOfPeriods: 1,
             startDate: "",
             endDate: "")
